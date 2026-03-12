@@ -1,1 +1,11 @@
-
+{
+  "name": "yt-auto-scheduler",
+  "version": "1.0.0",
+  "description": "YouTube auto scheduler from Google Drive",
+  "main": "scheduler.js",
+  "type": "module",
+  "dependencies": {
+    "googleapis": "^126.0.1",
+    "dayjs": "^1.11.10"
+  }
+}
