@@ -45,6 +45,7 @@ function getNextSlot() {
   for (const slot of SLOTS) {
 
     const d = new Date();
+
     d.setHours(slot.h);
     d.setMinutes(slot.m);
     d.setSeconds(0);
@@ -65,8 +66,9 @@ function getNextSlot() {
 async function getPendingVideos() {
 
   const res = await drive.files.list({
-    q: `'${PENDING_FOLDER_ID}' in parents and mimeType contains 'video/'`,
-    fields: "files(id,name)"
+    q: `'${PENDING_FOLDER_ID}' in parents and mimeType contains 'video/' and trashed=false`,
+    fields: "files(id,name)",
+    spaces: "drive"
   });
 
   return res.data.files;
@@ -83,12 +85,7 @@ async function downloadFile(fileId, name) {
   );
 
   await new Promise((resolve, reject) => {
-
-    res.data
-      .pipe(dest)
-      .on("finish", resolve)
-      .on("error", reject);
-
+    res.data.pipe(dest).on("finish", resolve).on("error", reject);
   });
 
   return filePath;
