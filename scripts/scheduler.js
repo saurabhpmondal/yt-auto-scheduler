@@ -1,6 +1,6 @@
-const fs = require("fs");
-const path = require("path");
-const { google } = require("googleapis");
+import fs from "fs";
+import path from "path";
+import { google } from "googleapis";
 
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
@@ -73,7 +73,7 @@ async function getPendingVideos() {
 
 async function downloadFile(fileId, fileName) {
 
-  const filePath = path.join("/tmp", fileName);
+  const filePath = `/tmp/${fileName}`;
   const dest = fs.createWriteStream(filePath);
 
   const res = await drive.files.get(
