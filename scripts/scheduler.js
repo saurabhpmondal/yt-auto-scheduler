@@ -1,9 +1,11 @@
 import fs from "fs";
-import path from "path";
 import { google } from "googleapis";
 
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+
+const CLIENT_ID = credentials.installed.client_id;
+const CLIENT_SECRET = credentials.installed.client_secret;
+
 const REFRESH_TOKEN = process.env.YOUTUBE_REFRESH_TOKEN;
 
 const PENDING_FOLDER_ID = process.env.PENDING_FOLDER_ID;
@@ -43,7 +45,6 @@ function getNextSlot() {
   for (const slot of SLOTS) {
 
     const d = new Date();
-
     d.setHours(slot.h);
     d.setMinutes(slot.m);
     d.setSeconds(0);
@@ -71,9 +72,9 @@ async function getPendingVideos() {
   return res.data.files;
 }
 
-async function downloadFile(fileId, fileName) {
+async function downloadFile(fileId, name) {
 
-  const filePath = `/tmp/${fileName}`;
+  const filePath = `/tmp/${name}`;
   const dest = fs.createWriteStream(filePath);
 
   const res = await drive.files.get(
