@@ -33,10 +33,11 @@ jobs:
           SCHEDULED_FOLDER_ID: ${{ secrets.SCHEDULED_FOLDER_ID }}
         run: node scripts/scheduler.js
 
-      - name: Commit updated schedule date
+      - name: Commit dashboard updates
         run: |
           git config --global user.name "scheduler-bot"
           git config --global user.email "scheduler@bot.com"
+          git add scheduler-status.json
           git add last_schedule_date.json
-          git commit -m "update next schedule date" || echo "No changes to commit"
+          git commit -m "update scheduler status" || echo "No changes"
           git push
