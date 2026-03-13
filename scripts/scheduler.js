@@ -11,13 +11,10 @@ const REFRESH_TOKEN = process.env.YOUTUBE_REFRESH_TOKEN;
 const PENDING_FOLDER_ID = process.env.PENDING_FOLDER_ID;
 const SCHEDULED_FOLDER_ID = process.env.SCHEDULED_FOLDER_ID;
 
-/*
-Uploads per run
-*/
 const MAX_UPLOADS_PER_RUN = 4;
 
 /*
-IST offset
+IST Offset
 */
 const IST_OFFSET = 5.5 * 60 * 60 * 1000;
 
@@ -41,9 +38,6 @@ const drive = google.drive({
   auth: oauth2Client
 });
 
-/*
-Base posting slots (IST)
-*/
 const SLOTS = [
   { h: 10, m: 0 },
   { h: 16, m: 0 },
@@ -51,54 +45,38 @@ const SLOTS = [
   { h: 20, m: 0 }
 ];
 
-/*
-Hook titles
-*/
 const TITLE_VARIATIONS = [
   "WATCH TILL THE END 🔥",
-  "1 HP LEFT 😳",
   "THIS WAS INSANE 🤯",
+  "1 HP LEFT 😳",
   "NO WAY THIS WORKED",
-  "LAST SECOND CLUTCH",
-  "UNBELIEVABLE FINISH",
-  "PRO PLAYER MOVE",
-  "THIS DEFENSE SAVED THE GAME"
+  "CLUTCH MOMENT",
+  "UNBELIEVABLE FINISH"
 ];
 
-/*
-Gameplay titles
-*/
 const GAMEPLAY_TITLES = [
   "Clash Royale Comeback",
   "Clash Royale Epic Gameplay",
-  "Clash Royale Clutch Moment",
-  "Clash Royale Intense Battle",
   "Clash Royale Final Tower Finish",
-  "Clash Royale Pro Strategy",
-  "Clash Royale Unexpected Win",
-  "Clash Royale Ultimate Defense"
+  "Clash Royale Clutch Moment",
+  "Clash Royale Pro Strategy"
 ];
 
-/*
-Random helper
-*/
 function rand(min,max){
   return Math.floor(Math.random()*(max-min+1))+min;
 }
 
 /*
-Generate random human-like schedule
+Generate schedule times (IST + human randomness)
 */
 function generateScheduleSlots(count){
 
   const slots = [];
 
   const now = new Date();
-
   const istNow = new Date(now.getTime() + IST_OFFSET);
 
   const start = new Date(istNow);
-
   start.setDate(start.getDate() + 1);
   start.setHours(0);
   start.setMinutes(0);
@@ -114,15 +92,15 @@ function generateScheduleSlots(count){
 
       d.setDate(start.getDate() + day);
 
-      const minuteVariation = rand(-12,12);
+      const variation = rand(-12,12);
 
       d.setHours(s.h);
-      d.setMinutes(s.m + minuteVariation);
+      d.setMinutes(s.m + variation);
       d.setSeconds(rand(0,40));
 
-      const utcTime = new Date(d.getTime() - IST_OFFSET);
+      const utc = new Date(d.getTime() - IST_OFFSET);
 
-      slots.push(utcTime);
+      slots.push(utc);
 
       if(slots.length >= count) break;
 
@@ -136,9 +114,6 @@ function generateScheduleSlots(count){
 
 }
 
-/*
-Generate viral title
-*/
 function generateTitle(){
 
   const hook = TITLE_VARIATIONS[rand(0,TITLE_VARIATIONS.length-1)];
@@ -148,18 +123,11 @@ function generateTitle(){
 
 }
 
-/*
-Description
-*/
 function generateDescription(title){
 
 return `${title}
 
 Subscribe for daily Clash Royale gameplay!
-
-🔥 Daily Shorts
-🔥 Epic Gameplay
-🔥 Pro Moments
 
 #shorts
 #clashroyale
@@ -168,26 +136,18 @@ Subscribe for daily Clash Royale gameplay!
 
 }
 
-/*
-Get pending videos
-*/
 async function getPendingVideos(){
 
   const res = await drive.files.list({
-
     q: `'${PENDING_FOLDER_ID}' in parents and mimeType contains 'video/' and trashed=false`,
     fields: "files(id,name)",
     spaces: "drive"
-
   });
 
   return res.data.files.sort((a,b)=>a.name.localeCompare(b.name));
 
 }
 
-/*
-Download file
-*/
 async function downloadFile(fileId,name){
 
   const path = `/tmp/${name}`;
@@ -211,14 +171,11 @@ async function downloadFile(fileId,name){
 
 }
 
-/*
-Upload video
-*/
 async function uploadToYoutube(filePath,publishTime){
 
   const title = generateTitle();
 
-  console.log("Using title:",title);
+  console.log("Title:",title);
 
   const res = await youtube.videos.insert({
 
@@ -233,8 +190,7 @@ async function uploadToYoutube(filePath,publishTime){
           "shorts",
           "clashroyale",
           "gaming",
-          "mobilegaming",
-          "clash royale gameplay"
+          "mobilegaming"
         ]
       },
 
@@ -255,33 +211,51 @@ async function uploadToYoutube(filePath,publishTime){
 
 }
 
-/*
-Move file to scheduled folder
-*/
 async function moveFile(fileId){
 
   await drive.files.update({
-
     fileId,
     addParents:SCHEDULED_FOLDER_ID,
     removeParents:PENDING_FOLDER_ID
-
   });
 
 }
 
 /*
-Main scheduler
+Write dashboard status
 */
+function writeDashboardStatus(pending,uploaded){
+
+  const status = {
+
+    last_run: new Date().toISOString(),
+    pending_videos: pending,
+    uploaded_this_run: uploaded,
+    total_processed_this_run: uploaded
+
+  };
+
+  fs.writeFileSync(
+    "scheduler-status.json",
+    JSON.stringify(status,null,2)
+  );
+
+}
+
 async function run(){
 
   console.log("Checking pending videos...");
 
   const files = await getPendingVideos();
 
+  const pendingCount = files.length;
+
   if(!files.length){
 
     console.log("No pending videos.");
+
+    writeDashboardStatus(0,0);
+
     return;
 
   }
@@ -291,6 +265,8 @@ async function run(){
   const slots = generateScheduleSlots(batch.length);
 
   console.log(`Scheduling ${batch.length} videos`);
+
+  let uploadedCount = 0;
 
   for(let i=0;i<batch.length;i++){
 
@@ -303,18 +279,20 @@ async function run(){
 
     console.log("Scheduling for:",slot);
 
-    const id = await uploadToYoutube(
-      path,
-      slot
-    );
+    const id = await uploadToYoutube(path,slot);
 
     console.log("Uploaded:",id);
 
     await moveFile(video.id);
 
-    console.log("Moved to SCHEDULED");
+    uploadedCount++;
 
   }
+
+  writeDashboardStatus(
+    pendingCount - uploadedCount,
+    uploadedCount
+  );
 
 }
 
