@@ -12,7 +12,7 @@ const PENDING_FOLDER_ID = process.env.PENDING_FOLDER_ID;
 const SCHEDULED_FOLDER_ID = process.env.SCHEDULED_FOLDER_ID;
 
 /*
-Safe uploads per run
+Uploads per run
 */
 const MAX_UPLOADS_PER_RUN = 4;
 
@@ -42,13 +42,34 @@ const drive = google.drive({
 });
 
 /*
-Daily posting slots (IST)
+Posting slots (IST)
 */
 const SLOTS = [
   { h: 10, m: 0 },
   { h: 16, m: 0 },
   { h: 18, m: 0 },
   { h: 20, m: 0 }
+];
+
+/*
+Title variations for Shorts
+*/
+const TITLE_VARIATIONS = [
+  "Insane Clash Royale Finish",
+  "Epic Clash Royale Clutch",
+  "Crazy Clash Royale Comeback",
+  "Clash Royale Pro Gameplay",
+  "Unbelievable Clash Royale Moment",
+  "Clash Royale Insane Push",
+  "Clash Royale Final Seconds Win",
+  "Clash Royale Intense Battle",
+  "Pro Level Clash Royale Gameplay",
+  "Clash Royale Perfect Counter",
+  "Clash Royale Unexpected Victory",
+  "Clash Royale Ultimate Defense",
+  "Clash Royale Close Match",
+  "Clash Royale Epic Tower Finish",
+  "Clash Royale Last Second Clutch"
 ];
 
 /*
@@ -99,27 +120,20 @@ function generateScheduleSlots(count){
 }
 
 /*
-Generate title
+Random title generator
 */
-function generateTitle(filename){
+function generateTitle(){
 
-  let clean = filename;
+  const index = Math.floor(Math.random() * TITLE_VARIATIONS.length);
 
-  clean = clean.replace(".mp4","");
-  clean = clean.replace(/\(\d+\)/g,"");
-  clean = clean.replace(/_/g," ");
-  clean = clean.trim();
+  const base = TITLE_VARIATIONS[index];
 
-  if(clean.toLowerCase().includes("clash royale")){
-    clean = "Clash Royale Gameplay";
-  }
-
-  return `${clean} #shorts #clashroyale`;
+  return `${base} 🔥 #shorts #clashroyale`;
 
 }
 
 /*
-Generate description
+Description generator
 */
 function generateDescription(title){
 
@@ -127,14 +141,19 @@ return `${title}
 
 Subscribe for daily Clash Royale gameplay!
 
+🔥 Daily Shorts
+🔥 Epic Gameplay
+🔥 Pro Moments
+
 #shorts
 #clashroyale
-#gaming`;
+#gaming
+#mobilegaming`;
 
 }
 
 /*
-Get pending files
+Get pending videos
 */
 async function getPendingVideos(){
 
@@ -177,11 +196,11 @@ async function downloadFile(fileId,name){
 }
 
 /*
-Upload to YouTube
+Upload video to YouTube
 */
-async function uploadToYoutube(filePath,filename,publishTime){
+async function uploadToYoutube(filePath,publishTime){
 
-  const title = generateTitle(filename);
+  const title = generateTitle();
 
   console.log("Using title:",title);
 
@@ -194,7 +213,13 @@ async function uploadToYoutube(filePath,filename,publishTime){
       snippet:{
         title:title,
         description:generateDescription(title),
-        tags:["shorts","clashroyale","gaming"]
+        tags:[
+          "shorts",
+          "clashroyale",
+          "gaming",
+          "mobilegaming",
+          "clash royale gameplay"
+        ]
       },
 
       status:{
@@ -215,7 +240,7 @@ async function uploadToYoutube(filePath,filename,publishTime){
 }
 
 /*
-Move file after scheduling
+Move video after scheduling
 */
 async function moveFile(fileId){
 
@@ -254,6 +279,7 @@ async function run(){
   for(let i=0;i<batch.length;i++){
 
     const video = batch[i];
+
     const slot = slots[i];
 
     console.log("Processing:",video.name);
@@ -264,7 +290,6 @@ async function run(){
 
     const id = await uploadToYoutube(
       path,
-      video.name,
       slot
     );
 
