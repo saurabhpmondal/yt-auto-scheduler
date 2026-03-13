@@ -35,9 +35,6 @@ const drive = google.drive({
   auth: oauth2Client
 });
 
-/*
-Fixed slots IST
-*/
 const SLOTS = [
   { h: 10, m: 0 },
   { h: 16, m: 0 },
@@ -67,95 +64,61 @@ function rand(min,max){
 }
 
 /*
-Get latest scheduled video date
+Get next scheduling day
 */
-async function getLastScheduledDate(){
+function getNextScheduleDate(){
 
-  const res = await youtube.search.list({
-    part: "id",
-    forMine: true,
-    type: "video",
-    order: "date",
-    maxResults: 20
-  });
+  const today = new Date(Date.now() + IST_OFFSET);
+  today.setHours(0,0,0,0);
 
-  const ids = res.data.items.map(v=>v.id.videoId);
+  const file = "schedule-date.json";
 
-  if(ids.length === 0) return null;
+  if(!fs.existsSync(file)){
 
-  const videos = await youtube.videos.list({
-    part: "status",
-    id: ids.join(",")
-  });
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate()+1);
 
-  let latest = null;
+    fs.writeFileSync(file,JSON.stringify({
+      lastDate: tomorrow.toISOString()
+    }));
 
-  for(const v of videos.data.items){
-
-    const publishAt = v.status.publishAt;
-
-    if(!publishAt) continue;
-
-    const d = new Date(publishAt);
-
-    if(!latest || d > latest){
-      latest = d;
-    }
+    return tomorrow;
 
   }
 
-  return latest;
+  const data = JSON.parse(fs.readFileSync(file));
+
+  const last = new Date(data.lastDate);
+
+  const next = new Date(last);
+  next.setDate(next.getDate()+1);
+
+  fs.writeFileSync(file,JSON.stringify({
+    lastDate: next.toISOString()
+  }));
+
+  return next;
 
 }
 
 /*
-Generate schedule slots
+Generate slots
 */
-async function generateScheduleSlots(count){
+function generateScheduleSlots(baseDate){
 
-  const slots = [];
+  const slots=[];
 
-  const lastScheduled = await getLastScheduledDate();
+  for(const s of SLOTS){
 
-  let startIST;
+    const d=new Date(baseDate);
 
-  if(lastScheduled){
+    d.setHours(s.h);
+    d.setMinutes(s.m + rand(-8,8));
+    d.setSeconds(rand(0,40));
 
-    startIST = new Date(lastScheduled.getTime() + IST_OFFSET);
+    const utc=new Date(d.getTime()-IST_OFFSET);
 
-    startIST.setDate(startIST.getDate() + 1);
-
-  }else{
-
-    const now = new Date();
-    startIST = new Date(now.getTime() + IST_OFFSET);
-    startIST.setDate(startIST.getDate() + 1);
-
-  }
-
-  let dayOffset = 0;
-
-  while(slots.length < count){
-
-    for(const s of SLOTS){
-
-      const base = new Date(startIST);
-
-      base.setDate(startIST.getDate() + dayOffset);
-
-      base.setHours(s.h);
-      base.setMinutes(s.m + rand(-10,10));
-      base.setSeconds(rand(0,40));
-
-      const utc = new Date(base.getTime() - IST_OFFSET);
-
-      slots.push(utc);
-
-      if(slots.length >= count) break;
-
-    }
-
-    dayOffset++;
+    slots.push(utc);
 
   }
 
@@ -199,19 +162,19 @@ async function getPendingVideos(){
 
 async function downloadFile(fileId,name){
 
-  const path = `/tmp/${name}`;
+  const path=`/tmp/${name}`;
 
-  const dest = fs.createWriteStream(path);
+  const dest=fs.createWriteStream(path);
 
-  const res = await drive.files.get(
-    { fileId, alt:"media" },
-    { responseType:"stream" }
+  const res=await drive.files.get(
+    {fileId,alt:"media"},
+    {responseType:"stream"}
   );
 
   await new Promise((resolve,reject)=>{
     res.data.pipe(dest)
-      .on("finish",resolve)
-      .on("error",reject);
+    .on("finish",resolve)
+    .on("error",reject);
   });
 
   return path;
@@ -220,27 +183,22 @@ async function downloadFile(fileId,name){
 
 async function uploadToYoutube(filePath,publishTime){
 
-  const title = generateTitle();
+  const title=generateTitle();
 
-  console.log("Title:",title);
-
-  const res = await youtube.videos.insert({
+  const res=await youtube.videos.insert({
 
     part:"snippet,status",
 
     requestBody:{
-
       snippet:{
         title:title,
         description:generateDescription(title),
-        tags:["shorts","clashroyale","gaming","mobilegaming"]
+        tags:["shorts","clashroyale","gaming"]
       },
-
       status:{
         privacyStatus:"private",
         publishAt:publishTime.toISOString()
       }
-
     },
 
     media:{
@@ -265,13 +223,11 @@ async function moveFile(fileId){
 
 function writeDashboardStatus(pending,uploaded){
 
-  const status = {
-
+  const status={
     last_run:new Date().toISOString(),
     pending_videos:pending,
     uploaded_this_run:uploaded,
     total_processed_this_run:uploaded
-
   };
 
   fs.writeFileSync(
@@ -285,9 +241,9 @@ async function run(){
 
   console.log("Checking pending videos...");
 
-  const files = await getPendingVideos();
+  const files=await getPendingVideos();
 
-  const pendingCount = files.length;
+  const pendingCount=files.length;
 
   if(!files.length){
 
@@ -296,24 +252,26 @@ async function run(){
 
   }
 
-  const batch = files.slice(0,MAX_UPLOADS_PER_RUN);
+  const batch=files.slice(0,MAX_UPLOADS_PER_RUN);
 
-  const slots = await generateScheduleSlots(batch.length);
+  const baseDate=getNextScheduleDate();
 
-  let uploadedCount = 0;
+  const slots=generateScheduleSlots(baseDate);
+
+  let uploadedCount=0;
 
   for(let i=0;i<batch.length;i++){
 
-    const video = batch[i];
-    const slot = slots[i];
+    const video=batch[i];
+    const slot=slots[i];
 
     console.log("Processing:",video.name);
 
-    const path = await downloadFile(video.id,video.name);
+    const path=await downloadFile(video.id,video.name);
 
     console.log("Scheduling for:",slot);
 
-    const id = await uploadToYoutube(path,slot);
+    const id=await uploadToYoutube(path,slot);
 
     console.log("Uploaded:",id);
 
@@ -324,7 +282,7 @@ async function run(){
   }
 
   writeDashboardStatus(
-    pendingCount - uploadedCount,
+    pendingCount-uploadedCount,
     uploadedCount
   );
 
