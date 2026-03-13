@@ -204,14 +204,41 @@ async function moveFile(fileId){
 
 }
 
+/*
+DASHBOARD STATUS WRITER
+*/
+function updateDashboardStatus(pendingCount, processedCount){
+
+  const lastSchedule = JSON.parse(fs.readFileSync("last_schedule_date.json"));
+
+  const status = {
+    last_run: new Date().toISOString(),
+    pending_videos: pendingCount,
+    uploaded_this_run: processedCount,
+    total_processed_this_run: processedCount,
+    last_schedule_date: lastSchedule.last_date
+  };
+
+  fs.writeFileSync(
+    "scheduler-status.json",
+    JSON.stringify(status,null,2)
+  );
+
+}
+
 async function run(){
 
   console.log("Checking pending videos...");
 
   const files=await getPendingVideos();
 
+  const totalPending=files.length;
+
   if(!files.length){
     console.log("No pending videos.");
+
+    updateDashboardStatus(0,0);
+
     return;
   }
 
@@ -220,6 +247,8 @@ async function run(){
   const baseDate=getLastScheduleDate();
 
   const slots=generateScheduleSlots(baseDate);
+
+  let processed=0;
 
   for(let i=0;i<batch.length;i++){
 
@@ -238,12 +267,18 @@ async function run(){
 
     await moveFile(video.id);
 
+    processed++;
+
   }
 
   const nextDate=new Date(baseDate);
   nextDate.setDate(nextDate.getDate()+1);
 
   updateLastScheduleDate(nextDate);
+
+  const remaining = totalPending - processed;
+
+  updateDashboardStatus(remaining, processed);
 
 }
 
