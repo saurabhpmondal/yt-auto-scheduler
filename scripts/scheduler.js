@@ -13,8 +13,6 @@ const SCHEDULED_FOLDER_ID = process.env.SCHEDULED_FOLDER_ID;
 
 /*
 Safe upload count per run.
-YouTube quota ≈ 6 uploads/day default
-We keep it 4 to stay safe.
 */
 const MAX_UPLOADS_PER_RUN = 4;
 
@@ -45,13 +43,15 @@ const SLOTS = [
   { h: 20, m: 0 }
 ];
 
-function generateScheduleSlots(count) {
+/*
+Generate scheduling slots
+*/
+function generateScheduleSlots(count){
 
   const slots = [];
 
   const start = new Date();
 
-  // Start scheduling from tomorrow
   start.setDate(start.getDate() + 1);
   start.setHours(10);
   start.setMinutes(0);
@@ -59,9 +59,9 @@ function generateScheduleSlots(count) {
 
   let day = 0;
 
-  while (slots.length < count) {
+  while(slots.length < count){
 
-    for (const s of SLOTS) {
+    for(const s of SLOTS){
 
       const d = new Date(start);
 
@@ -71,7 +71,7 @@ function generateScheduleSlots(count) {
 
       slots.push(new Date(d));
 
-      if (slots.length >= count) break;
+      if(slots.length >= count) break;
     }
 
     day++;
@@ -81,21 +81,26 @@ function generateScheduleSlots(count) {
 }
 
 /*
-Clean filename into nicer YouTube title
+Create better YouTube title
 */
 function generateTitle(filename){
 
-  const clean = filename
-    .replace(".mp4","")
-    .replace(/\(\d+\)/,"")
-    .replace(/_/g," ")
-    .trim();
+  let clean = filename;
 
-  return `${clean} #shorts #clashroyale #gaming`;
+  clean = clean.replace(".mp4","");
+  clean = clean.replace(/\(\d+\)/g,"");
+  clean = clean.replace(/_/g," ");
+  clean = clean.trim();
+
+  if(clean.toLowerCase().includes("clash royale")){
+    clean = "Clash Royale Epic Gameplay";
+  }
+
+  return `${clean} #shorts`;
 }
 
 /*
-Auto description
+Description
 */
 function generateDescription(title){
 
@@ -105,32 +110,14 @@ Subscribe for daily Clash Royale gameplay!
 
 #shorts
 #clashroyale
-#mobilegaming
-#gaming`;
+#gaming
+`;
 }
 
 /*
-Dashboard status writer
+Get pending files
 */
-function writeStatus(pending, uploaded, totalProcessed){
-
-  const status = {
-
-    pending_videos: pending,
-    uploaded_this_run: uploaded,
-    total_processed_this_run: totalProcessed,
-    last_run: new Date().toISOString()
-
-  };
-
-  fs.writeFileSync(
-    "scheduler-status.json",
-    JSON.stringify(status, null, 2)
-  );
-
-}
-
-async function getPendingVideos() {
+async function getPendingVideos(){
 
   const res = await drive.files.list({
     q: `'${PENDING_FOLDER_ID}' in parents and mimeType contains 'video/' and trashed=false`,
@@ -141,49 +128,57 @@ async function getPendingVideos() {
   return res.data.files.sort((a,b)=>a.name.localeCompare(b.name));
 }
 
-async function downloadFile(fileId, name) {
+/*
+Download file from drive
+*/
+async function downloadFile(fileId,name){
 
   const path = `/tmp/${name}`;
 
   const dest = fs.createWriteStream(path);
 
   const res = await drive.files.get(
-    { fileId, alt: "media" },
-    { responseType: "stream" }
+    { fileId, alt:"media" },
+    { responseType:"stream" }
   );
 
-  await new Promise((resolve, reject) => {
-    res.data.pipe(dest).on("finish", resolve).on("error", reject);
+  await new Promise((resolve,reject)=>{
+    res.data.pipe(dest).on("finish",resolve).on("error",reject);
   });
 
   return path;
 }
 
-async function uploadToYoutube(filePath, filename, publishTime) {
+/*
+Upload video to YouTube
+*/
+async function uploadToYoutube(filePath,filename,publishTime){
 
   const title = generateTitle(filename);
 
+  console.log("Using title:",title);
+
   const res = await youtube.videos.insert({
 
-    part: "snippet,status",
+    part:"snippet,status",
 
-    requestBody: {
+    requestBody:{
 
-      snippet: {
-        title: title,
-        description: generateDescription(title),
-        tags: ["shorts","clashroyale","gaming"]
+      snippet:{
+        title:title,
+        description:generateDescription(title),
+        tags:["shorts","clashroyale","gaming"]
       },
 
-      status: {
-        privacyStatus: "private",
-        publishAt: publishTime.toISOString()
+      status:{
+        privacyStatus:"private",
+        publishAt:publishTime.toISOString()
       }
 
     },
 
-    media: {
-      body: fs.createReadStream(filePath)
+    media:{
+      body:fs.createReadStream(filePath)
     }
 
   });
@@ -191,49 +186,51 @@ async function uploadToYoutube(filePath, filename, publishTime) {
   return res.data.id;
 }
 
-async function moveFile(fileId) {
+/*
+Move file to scheduled folder
+*/
+async function moveFile(fileId){
 
   await drive.files.update({
     fileId,
-    addParents: SCHEDULED_FOLDER_ID,
-    removeParents: PENDING_FOLDER_ID
+    addParents:SCHEDULED_FOLDER_ID,
+    removeParents:PENDING_FOLDER_ID
   });
 
 }
 
-async function run() {
+/*
+Main run
+*/
+async function run(){
 
   console.log("Checking pending videos...");
 
   const files = await getPendingVideos();
 
-  if (!files.length) {
+  if(!files.length){
 
     console.log("No pending videos.");
-
-    writeStatus(0,0,0);
-
     return;
+
   }
 
-  const batch = files.slice(0, MAX_UPLOADS_PER_RUN);
+  const batch = files.slice(0,MAX_UPLOADS_PER_RUN);
 
   const slots = generateScheduleSlots(batch.length);
 
   console.log(`Scheduling ${batch.length} videos`);
 
-  let uploadedCount = 0;
-
-  for (let i = 0; i < batch.length; i++) {
+  for(let i=0;i<batch.length;i++){
 
     const video = batch[i];
     const slot = slots[i];
 
-    console.log("Processing:", video.name);
+    console.log("Processing:",video.name);
 
-    const path = await downloadFile(video.id, video.name);
+    const path = await downloadFile(video.id,video.name);
 
-    console.log("Scheduling for:", slot);
+    console.log("Scheduling for:",slot);
 
     const id = await uploadToYoutube(
       path,
@@ -241,21 +238,17 @@ async function run() {
       slot
     );
 
-    console.log("Uploaded:", id);
+    console.log("Uploaded:",id);
 
     await moveFile(video.id);
 
     console.log("Moved to SCHEDULED");
 
-    uploadedCount++;
-
   }
-
-  writeStatus(files.length - uploadedCount, uploadedCount, uploadedCount);
 
 }
 
-run().catch(err => {
+run().catch(err=>{
   console.error(err);
   process.exit(1);
 });
