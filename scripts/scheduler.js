@@ -12,9 +12,14 @@ const PENDING_FOLDER_ID = process.env.PENDING_FOLDER_ID;
 const SCHEDULED_FOLDER_ID = process.env.SCHEDULED_FOLDER_ID;
 
 /*
-Safe upload count per run.
+Safe uploads per run
 */
 const MAX_UPLOADS_PER_RUN = 4;
+
+/*
+IST offset
+*/
+const IST_OFFSET = 5.5 * 60 * 60 * 1000;
 
 const oauth2Client = new google.auth.OAuth2(
   CLIENT_ID,
@@ -36,6 +41,9 @@ const drive = google.drive({
   auth: oauth2Client
 });
 
+/*
+Daily posting slots (IST)
+*/
 const SLOTS = [
   { h: 10, m: 0 },
   { h: 16, m: 0 },
@@ -44,16 +52,20 @@ const SLOTS = [
 ];
 
 /*
-Generate scheduling slots
+Generate IST scheduling slots
 */
 function generateScheduleSlots(count){
 
   const slots = [];
 
-  const start = new Date();
+  const now = new Date();
+
+  const istNow = new Date(now.getTime() + IST_OFFSET);
+
+  const start = new Date(istNow);
 
   start.setDate(start.getDate() + 1);
-  start.setHours(10);
+  start.setHours(0);
   start.setMinutes(0);
   start.setSeconds(0);
 
@@ -68,20 +80,26 @@ function generateScheduleSlots(count){
       d.setDate(start.getDate() + day);
       d.setHours(s.h);
       d.setMinutes(s.m);
+      d.setSeconds(0);
 
-      slots.push(new Date(d));
+      const utcTime = new Date(d.getTime() - IST_OFFSET);
+
+      slots.push(utcTime);
 
       if(slots.length >= count) break;
+
     }
 
     day++;
+
   }
 
   return slots;
+
 }
 
 /*
-Create better YouTube title
+Generate title
 */
 function generateTitle(filename){
 
@@ -93,14 +111,15 @@ function generateTitle(filename){
   clean = clean.trim();
 
   if(clean.toLowerCase().includes("clash royale")){
-    clean = "Clash Royale Epic Gameplay";
+    clean = "Clash Royale Gameplay";
   }
 
-  return `${clean} #shorts`;
+  return `${clean} #shorts #clashroyale`;
+
 }
 
 /*
-Description
+Generate description
 */
 function generateDescription(title){
 
@@ -110,8 +129,8 @@ Subscribe for daily Clash Royale gameplay!
 
 #shorts
 #clashroyale
-#gaming
-`;
+#gaming`;
+
 }
 
 /*
@@ -120,16 +139,19 @@ Get pending files
 async function getPendingVideos(){
 
   const res = await drive.files.list({
+
     q: `'${PENDING_FOLDER_ID}' in parents and mimeType contains 'video/' and trashed=false`,
     fields: "files(id,name)",
     spaces: "drive"
+
   });
 
   return res.data.files.sort((a,b)=>a.name.localeCompare(b.name));
+
 }
 
 /*
-Download file from drive
+Download file
 */
 async function downloadFile(fileId,name){
 
@@ -143,14 +165,19 @@ async function downloadFile(fileId,name){
   );
 
   await new Promise((resolve,reject)=>{
-    res.data.pipe(dest).on("finish",resolve).on("error",reject);
+
+    res.data.pipe(dest)
+      .on("finish",resolve)
+      .on("error",reject);
+
   });
 
   return path;
+
 }
 
 /*
-Upload video to YouTube
+Upload to YouTube
 */
 async function uploadToYoutube(filePath,filename,publishTime){
 
@@ -184,23 +211,26 @@ async function uploadToYoutube(filePath,filename,publishTime){
   });
 
   return res.data.id;
+
 }
 
 /*
-Move file to scheduled folder
+Move file after scheduling
 */
 async function moveFile(fileId){
 
   await drive.files.update({
+
     fileId,
     addParents:SCHEDULED_FOLDER_ID,
     removeParents:PENDING_FOLDER_ID
+
   });
 
 }
 
 /*
-Main run
+Main scheduler
 */
 async function run(){
 
