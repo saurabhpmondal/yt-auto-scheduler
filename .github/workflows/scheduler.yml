@@ -2,13 +2,17 @@ name: scheduler
 
 on:
   schedule:
-    - cron: "0 */6 * * *"   # runs every 6 hours
+    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 jobs:
+
   scheduler:
 
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
 
     steps:
 
@@ -31,11 +35,17 @@ jobs:
           PENDING_FOLDER_ID: ${{ secrets.PENDING_FOLDER_ID }}
           SCHEDULED_FOLDER_ID: ${{ secrets.SCHEDULED_FOLDER_ID }}
 
+      - name: Create dashboard status file
+        run: |
+          if [ ! -f scheduler-status.json ]; then
+            echo '{"last_run":"init","pending_videos":0,"uploaded_this_run":0,"total_processed_this_run":0}' > scheduler-status.json
+          fi
+
       - name: Commit dashboard status
         run: |
           git config --global user.name "scheduler-bot"
           git config --global user.email "bot@github.com"
 
-          git add scheduler-status.json || true
-          git commit -m "update scheduler dashboard status" || true
+          git add scheduler-status.json
+          git commit -m "update scheduler dashboard status" || echo "No changes to commit"
           git push
