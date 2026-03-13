@@ -83,71 +83,16 @@ Subscribe for daily Clash Royale gameplay!
 }
 
 /*
-Get latest scheduled video date
+Generate tomorrow IST slots
 */
-async function getLatestScheduledDate(){
+function generateScheduleSlots(count){
 
-  const res = await youtube.search.list({
-    part: "id",
-    forMine: true,
-    type: "video",
-    order: "date",
-    maxResults: 20
-  });
+  const nowIST = new Date(Date.now() + IST_OFFSET);
 
-  if(!res.data.items.length) return null;
+  const base = new Date(nowIST);
 
-  const ids = res.data.items.map(v=>v.id.videoId);
-
-  const videos = await youtube.videos.list({
-    part:"status",
-    id:ids.join(",")
-  });
-
-  let latest=null;
-
-  for(const v of videos.data.items){
-
-    if(!v.status.publishAt) continue;
-
-    const d=new Date(v.status.publishAt);
-
-    if(!latest || d>latest){
-      latest=d;
-    }
-
-  }
-
-  return latest;
-
-}
-
-/*
-Generate slots
-*/
-async function generateScheduleSlots(count){
-
-  let baseDate;
-
-  const latest = await getLatestScheduledDate();
-
-  if(!latest){
-
-    const nowIST = new Date(Date.now()+IST_OFFSET);
-
-    baseDate = new Date(nowIST);
-    baseDate.setDate(baseDate.getDate()+1);
-
-  }else{
-
-    const latestIST = new Date(latest.getTime()+IST_OFFSET);
-
-    baseDate = new Date(latestIST);
-    baseDate.setDate(baseDate.getDate()+1);
-
-  }
-
-  baseDate.setHours(0,0,0,0);
+  base.setDate(base.getDate()+1);
+  base.setHours(0,0,0,0);
 
   const slots=[];
 
@@ -155,7 +100,7 @@ async function generateScheduleSlots(count){
 
     const slot=SLOTS[i];
 
-    const d=new Date(baseDate);
+    const d=new Date(base);
 
     d.setHours(slot.h);
     d.setMinutes(slot.m);
@@ -259,7 +204,7 @@ async function run(){
 
   const batch=files.slice(0,MAX_UPLOADS_PER_RUN);
 
-  const slots=await generateScheduleSlots(batch.length);
+  const slots=generateScheduleSlots(batch.length);
 
   for(let i=0;i<batch.length;i++){
 
