@@ -81,7 +81,7 @@ function generateScheduleSlots(count) {
 }
 
 /*
-Clean video filename into better YouTube title
+Clean filename into nicer YouTube title
 */
 function generateTitle(filename){
 
@@ -109,6 +109,27 @@ Subscribe for daily Clash Royale gameplay!
 #gaming`;
 }
 
+/*
+Dashboard status writer
+*/
+function writeStatus(pending, uploaded, totalProcessed){
+
+  const status = {
+
+    pending_videos: pending,
+    uploaded_this_run: uploaded,
+    total_processed_this_run: totalProcessed,
+    last_run: new Date().toISOString()
+
+  };
+
+  fs.writeFileSync(
+    "scheduler-status.json",
+    JSON.stringify(status, null, 2)
+  );
+
+}
+
 async function getPendingVideos() {
 
   const res = await drive.files.list({
@@ -117,7 +138,6 @@ async function getPendingVideos() {
     spaces: "drive"
   });
 
-  // Sort videos by name for consistent ordering
   return res.data.files.sort((a,b)=>a.name.localeCompare(b.name));
 }
 
@@ -191,6 +211,8 @@ async function run() {
 
     console.log("No pending videos.");
 
+    writeStatus(0,0,0);
+
     return;
   }
 
@@ -200,10 +222,11 @@ async function run() {
 
   console.log(`Scheduling ${batch.length} videos`);
 
+  let uploadedCount = 0;
+
   for (let i = 0; i < batch.length; i++) {
 
     const video = batch[i];
-
     const slot = slots[i];
 
     console.log("Processing:", video.name);
@@ -224,7 +247,11 @@ async function run() {
 
     console.log("Moved to SCHEDULED");
 
+    uploadedCount++;
+
   }
+
+  writeStatus(files.length - uploadedCount, uploadedCount, uploadedCount);
 
 }
 
