@@ -45,7 +45,6 @@ const SLOTS = [
 const TITLE_VARIATIONS = [
   "WATCH TILL THE END 🔥",
   "THIS WAS INSANE 🤯",
-  "1 HP LEFT 😳",
   "NO WAY THIS WORKED",
   "CLUTCH MOMENT",
   "UNBELIEVABLE FINISH"
@@ -55,8 +54,7 @@ const GAMEPLAY_TITLES = [
   "Clash Royale Comeback",
   "Clash Royale Epic Gameplay",
   "Clash Royale Clutch Moment",
-  "Clash Royale Pro Strategy",
-  "Clash Royale Final Tower Finish"
+  "Clash Royale Pro Strategy"
 ];
 
 function rand(min,max){
@@ -64,40 +62,18 @@ function rand(min,max){
 }
 
 /*
-Get next scheduling day
+Find next schedule date based on current IST
 */
 function getNextScheduleDate(){
 
-  const today = new Date(Date.now() + IST_OFFSET);
-  today.setHours(0,0,0,0);
+  const nowIST = new Date(Date.now() + IST_OFFSET);
 
-  const file = "schedule-date.json";
+  const base = new Date(nowIST);
 
-  if(!fs.existsSync(file)){
+  base.setDate(base.getDate()+1);
+  base.setHours(0,0,0,0);
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate()+1);
-
-    fs.writeFileSync(file,JSON.stringify({
-      lastDate: tomorrow.toISOString()
-    }));
-
-    return tomorrow;
-
-  }
-
-  const data = JSON.parse(fs.readFileSync(file));
-
-  const last = new Date(data.lastDate);
-
-  const next = new Date(last);
-  next.setDate(next.getDate()+1);
-
-  fs.writeFileSync(file,JSON.stringify({
-    lastDate: next.toISOString()
-  }));
-
-  return next;
+  return base;
 
 }
 
@@ -143,8 +119,7 @@ Subscribe for daily Clash Royale gameplay!
 
 #shorts
 #clashroyale
-#gaming
-#mobilegaming`;
+#gaming`;
 
 }
 
@@ -184,6 +159,8 @@ async function downloadFile(fileId,name){
 async function uploadToYoutube(filePath,publishTime){
 
   const title=generateTitle();
+
+  console.log("Title:",title);
 
   const res=await youtube.videos.insert({
 
