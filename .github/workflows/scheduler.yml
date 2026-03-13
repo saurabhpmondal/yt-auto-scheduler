@@ -1,51 +1,42 @@
 name: scheduler
 
 on:
-  schedule:
-    - cron: "0 */6 * * *"
   workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: write
 
 jobs:
-
   scheduler:
-
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
 
     steps:
 
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Install dependencies
         run: npm install
 
       - name: Run scheduler
-        run: node scripts/scheduler.js
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           PENDING_FOLDER_ID: ${{ secrets.PENDING_FOLDER_ID }}
           SCHEDULED_FOLDER_ID: ${{ secrets.SCHEDULED_FOLDER_ID }}
+        run: node scripts/scheduler.js
 
-      - name: Create dashboard status file
-        run: |
-          if [ ! -f scheduler-status.json ]; then
-            echo '{"last_run":"init","pending_videos":0,"uploaded_this_run":0,"total_processed_this_run":0}' > scheduler-status.json
-          fi
-
-      - name: Commit dashboard status
+      - name: Commit updated schedule date
         run: |
           git config --global user.name "scheduler-bot"
-          git config --global user.email "bot@github.com"
-
-          git add scheduler-status.json
-          git commit -m "update scheduler dashboard status" || echo "No changes to commit"
+          git config --global user.email "scheduler@bot.com"
+          git add last_schedule_date.json
+          git commit -m "update next schedule date" || echo "No changes to commit"
           git push
