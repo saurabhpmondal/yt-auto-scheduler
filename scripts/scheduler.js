@@ -61,47 +61,6 @@ function rand(min,max){
   return Math.floor(Math.random()*(max-min+1))+min;
 }
 
-/*
-Find next schedule date based on current IST
-*/
-function getNextScheduleDate(){
-
-  const nowIST = new Date(Date.now() + IST_OFFSET);
-
-  const base = new Date(nowIST);
-
-  base.setDate(base.getDate()+1);
-  base.setHours(0,0,0,0);
-
-  return base;
-
-}
-
-/*
-Generate slots
-*/
-function generateScheduleSlots(baseDate){
-
-  const slots=[];
-
-  for(const s of SLOTS){
-
-    const d=new Date(baseDate);
-
-    d.setHours(s.h);
-    d.setMinutes(s.m + rand(-8,8));
-    d.setSeconds(rand(0,40));
-
-    const utc=new Date(d.getTime()-IST_OFFSET);
-
-    slots.push(utc);
-
-  }
-
-  return slots;
-
-}
-
 function generateTitle(){
 
   const hook = TITLE_VARIATIONS[rand(0,TITLE_VARIATIONS.length-1)];
@@ -120,6 +79,44 @@ Subscribe for daily Clash Royale gameplay!
 #shorts
 #clashroyale
 #gaming`;
+
+}
+
+/*
+Generate slots using IST exact time
+*/
+function generateScheduleSlots(count){
+
+  const slots=[];
+
+  const nowIST = new Date(Date.now() + IST_OFFSET);
+
+  const base = new Date(nowIST);
+
+  base.setDate(base.getDate()+1);
+  base.setHours(0,0,0,0);
+
+  for(let i=0;i<count;i++){
+
+    const slot=SLOTS[i % SLOTS.length];
+
+    const dayOffset=Math.floor(i / SLOTS.length);
+
+    const d=new Date(base);
+
+    d.setDate(base.getDate()+dayOffset);
+
+    d.setHours(slot.h);
+    d.setMinutes(slot.m);
+    d.setSeconds(0);
+
+    const utc=new Date(d.getTime()-IST_OFFSET);
+
+    slots.push(utc);
+
+  }
+
+  return slots;
 
 }
 
@@ -231,9 +228,7 @@ async function run(){
 
   const batch=files.slice(0,MAX_UPLOADS_PER_RUN);
 
-  const baseDate=getNextScheduleDate();
-
-  const slots=generateScheduleSlots(baseDate);
+  const slots=generateScheduleSlots(batch.length);
 
   let uploadedCount=0;
 
