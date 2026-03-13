@@ -77,22 +77,12 @@ Subscribe for daily Clash Royale gameplay!
 #gaming`;
 }
 
-/*
-READ LAST SCHEDULE DATE
-*/
 function getLastScheduleDate(){
-
   const data = JSON.parse(fs.readFileSync("last_schedule_date.json"));
-
   return new Date(data.last_date);
-
 }
 
-/*
-SAVE NEXT DATE
-*/
 function updateLastScheduleDate(nextDate){
-
   const obj = {
     last_date: nextDate.toISOString().split("T")[0]
   };
@@ -101,12 +91,8 @@ function updateLastScheduleDate(nextDate){
     "last_schedule_date.json",
     JSON.stringify(obj,null,2)
   );
-
 }
 
-/*
-GENERATE SLOTS
-*/
 function generateScheduleSlots(baseDate){
 
   const slots=[];
@@ -204,9 +190,6 @@ async function moveFile(fileId){
 
 }
 
-/*
-DASHBOARD STATUS WRITER
-*/
 function updateDashboardStatus(pendingCount, processedCount){
 
   const lastSchedule = JSON.parse(fs.readFileSync("last_schedule_date.json"));
@@ -232,14 +215,11 @@ async function run(){
 
   const files=await getPendingVideos();
 
-  const totalPending=files.length;
-
   if(!files.length){
-    console.log("No pending videos.");
 
     updateDashboardStatus(0,0);
-
     return;
+
   }
 
   const batch=files.slice(0,MAX_UPLOADS_PER_RUN);
@@ -276,9 +256,15 @@ async function run(){
 
   updateLastScheduleDate(nextDate);
 
-  const remaining = totalPending - processed;
+  /*
+  IMPORTANT FIX
+  Recount pending videos after moving files
+  */
 
-  updateDashboardStatus(remaining, processed);
+  const updatedFiles = await getPendingVideos();
+  const actualPending = updatedFiles.length;
+
+  updateDashboardStatus(actualPending, processed);
 
 }
 
