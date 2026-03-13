@@ -62,16 +62,12 @@ function rand(min,max){
 }
 
 function generateTitle(){
-
   const hook = TITLE_VARIATIONS[rand(0,TITLE_VARIATIONS.length-1)];
   const gameplay = GAMEPLAY_TITLES[rand(0,GAMEPLAY_TITLES.length-1)];
-
   return `${hook} ${gameplay} #shorts`;
-
 }
 
 function generateDescription(title){
-
 return `${title}
 
 Subscribe for daily Clash Royale gameplay!
@@ -79,28 +75,45 @@ Subscribe for daily Clash Royale gameplay!
 #shorts
 #clashroyale
 #gaming`;
+}
+
+/*
+READ LAST SCHEDULE DATE
+*/
+function getLastScheduleDate(){
+
+  const data = JSON.parse(fs.readFileSync("last_schedule_date.json"));
+
+  return new Date(data.last_date);
 
 }
 
 /*
-Generate tomorrow IST slots
+SAVE NEXT DATE
 */
-function generateScheduleSlots(count){
+function updateLastScheduleDate(nextDate){
 
-  const nowIST = new Date(Date.now() + IST_OFFSET);
+  const obj = {
+    last_date: nextDate.toISOString().split("T")[0]
+  };
 
-  const base = new Date(nowIST);
+  fs.writeFileSync(
+    "last_schedule_date.json",
+    JSON.stringify(obj,null,2)
+  );
 
-  base.setDate(base.getDate()+1);
-  base.setHours(0,0,0,0);
+}
+
+/*
+GENERATE SLOTS
+*/
+function generateScheduleSlots(baseDate){
 
   const slots=[];
 
-  for(let i=0;i<count;i++){
+  for(const slot of SLOTS){
 
-    const slot=SLOTS[i];
-
-    const d=new Date(base);
+    const d=new Date(baseDate);
 
     d.setHours(slot.h);
     d.setMinutes(slot.m);
@@ -204,7 +217,9 @@ async function run(){
 
   const batch=files.slice(0,MAX_UPLOADS_PER_RUN);
 
-  const slots=generateScheduleSlots(batch.length);
+  const baseDate=getLastScheduleDate();
+
+  const slots=generateScheduleSlots(baseDate);
 
   for(let i=0;i<batch.length;i++){
 
@@ -224,6 +239,11 @@ async function run(){
     await moveFile(video.id);
 
   }
+
+  const nextDate=new Date(baseDate);
+  nextDate.setDate(nextDate.getDate()+1);
+
+  updateLastScheduleDate(nextDate);
 
 }
 
