@@ -11,7 +11,12 @@ const REFRESH_TOKEN = process.env.YOUTUBE_REFRESH_TOKEN;
 const PENDING_FOLDER_ID = process.env.PENDING_FOLDER_ID;
 const SCHEDULED_FOLDER_ID = process.env.SCHEDULED_FOLDER_ID;
 
-const MAX_UPLOADS_PER_RUN = 20;
+/*
+Safe upload count per run.
+YouTube quota ≈ 6 uploads/day default
+We keep it 4 to stay safe.
+*/
+const MAX_UPLOADS_PER_RUN = 4;
 
 const oauth2Client = new google.auth.OAuth2(
   CLIENT_ID,
@@ -46,6 +51,7 @@ function generateScheduleSlots(count) {
 
   const start = new Date();
 
+  // Start scheduling from tomorrow
   start.setDate(start.getDate() + 1);
   start.setHours(10);
   start.setMinutes(0);
@@ -74,6 +80,35 @@ function generateScheduleSlots(count) {
   return slots;
 }
 
+/*
+Clean video filename into better YouTube title
+*/
+function generateTitle(filename){
+
+  const clean = filename
+    .replace(".mp4","")
+    .replace(/\(\d+\)/,"")
+    .replace(/_/g," ")
+    .trim();
+
+  return `${clean} #shorts #clashroyale #gaming`;
+}
+
+/*
+Auto description
+*/
+function generateDescription(title){
+
+return `${title}
+
+Subscribe for daily Clash Royale gameplay!
+
+#shorts
+#clashroyale
+#mobilegaming
+#gaming`;
+}
+
 async function getPendingVideos() {
 
   const res = await drive.files.list({
@@ -82,7 +117,8 @@ async function getPendingVideos() {
     spaces: "drive"
   });
 
-  return res.data.files;
+  // Sort videos by name for consistent ordering
+  return res.data.files.sort((a,b)=>a.name.localeCompare(b.name));
 }
 
 async function downloadFile(fileId, name) {
@@ -103,7 +139,9 @@ async function downloadFile(fileId, name) {
   return path;
 }
 
-async function uploadToYoutube(filePath, title, publishTime) {
+async function uploadToYoutube(filePath, filename, publishTime) {
+
+  const title = generateTitle(filename);
 
   const res = await youtube.videos.insert({
 
@@ -113,8 +151,8 @@ async function uploadToYoutube(filePath, title, publishTime) {
 
       snippet: {
         title: title,
-        description: "Auto uploaded",
-        tags: ["shorts"]
+        description: generateDescription(title),
+        tags: ["shorts","clashroyale","gaming"]
       },
 
       status: {
