@@ -117,13 +117,26 @@ function generateScheduleSlots(baseDate){
 
 async function getPendingVideos(){
 
-  const res = await drive.files.list({
-    q: `'${PENDING_FOLDER_ID}' in parents and mimeType contains 'video/' and trashed=false`,
-    fields: "files(id,name)",
-    spaces: "drive"
-  });
+  let files = [];
+  let pageToken = null;
 
-  return res.data.files.sort((a,b)=>a.name.localeCompare(b.name));
+  do {
+
+    const res = await drive.files.list({
+      q: `'${PENDING_FOLDER_ID}' in parents and mimeType contains 'video/' and trashed=false`,
+      fields: "nextPageToken, files(id,name)",
+      spaces: "drive",
+      pageSize: 100,
+      pageToken: pageToken
+    });
+
+    files = files.concat(res.data.files);
+
+    pageToken = res.data.nextPageToken;
+
+  } while (pageToken);
+
+  return files.sort((a,b)=>a.name.localeCompare(b.name));
 
 }
 
