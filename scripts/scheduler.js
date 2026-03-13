@@ -83,28 +83,79 @@ Subscribe for daily Clash Royale gameplay!
 }
 
 /*
-Generate slots using IST exact time
+Get latest scheduled video date
 */
-function generateScheduleSlots(count){
+async function getLatestScheduledDate(){
+
+  const res = await youtube.search.list({
+    part: "id",
+    forMine: true,
+    type: "video",
+    order: "date",
+    maxResults: 20
+  });
+
+  if(!res.data.items.length) return null;
+
+  const ids = res.data.items.map(v=>v.id.videoId);
+
+  const videos = await youtube.videos.list({
+    part:"status",
+    id:ids.join(",")
+  });
+
+  let latest=null;
+
+  for(const v of videos.data.items){
+
+    if(!v.status.publishAt) continue;
+
+    const d=new Date(v.status.publishAt);
+
+    if(!latest || d>latest){
+      latest=d;
+    }
+
+  }
+
+  return latest;
+
+}
+
+/*
+Generate slots
+*/
+async function generateScheduleSlots(count){
+
+  let baseDate;
+
+  const latest = await getLatestScheduledDate();
+
+  if(!latest){
+
+    const nowIST = new Date(Date.now()+IST_OFFSET);
+
+    baseDate = new Date(nowIST);
+    baseDate.setDate(baseDate.getDate()+1);
+
+  }else{
+
+    const latestIST = new Date(latest.getTime()+IST_OFFSET);
+
+    baseDate = new Date(latestIST);
+    baseDate.setDate(baseDate.getDate()+1);
+
+  }
+
+  baseDate.setHours(0,0,0,0);
 
   const slots=[];
 
-  const nowIST = new Date(Date.now() + IST_OFFSET);
-
-  const base = new Date(nowIST);
-
-  base.setDate(base.getDate()+1);
-  base.setHours(0,0,0,0);
-
   for(let i=0;i<count;i++){
 
-    const slot=SLOTS[i % SLOTS.length];
+    const slot=SLOTS[i];
 
-    const dayOffset=Math.floor(i / SLOTS.length);
-
-    const d=new Date(base);
-
-    d.setDate(base.getDate()+dayOffset);
+    const d=new Date(baseDate);
 
     d.setHours(slot.h);
     d.setMinutes(slot.m);
@@ -195,42 +246,20 @@ async function moveFile(fileId){
 
 }
 
-function writeDashboardStatus(pending,uploaded){
-
-  const status={
-    last_run:new Date().toISOString(),
-    pending_videos:pending,
-    uploaded_this_run:uploaded,
-    total_processed_this_run:uploaded
-  };
-
-  fs.writeFileSync(
-    "scheduler-status.json",
-    JSON.stringify(status,null,2)
-  );
-
-}
-
 async function run(){
 
   console.log("Checking pending videos...");
 
   const files=await getPendingVideos();
 
-  const pendingCount=files.length;
-
   if(!files.length){
-
-    writeDashboardStatus(0,0);
+    console.log("No pending videos.");
     return;
-
   }
 
   const batch=files.slice(0,MAX_UPLOADS_PER_RUN);
 
-  const slots=generateScheduleSlots(batch.length);
-
-  let uploadedCount=0;
+  const slots=await generateScheduleSlots(batch.length);
 
   for(let i=0;i<batch.length;i++){
 
@@ -249,14 +278,7 @@ async function run(){
 
     await moveFile(video.id);
 
-    uploadedCount++;
-
   }
-
-  writeDashboardStatus(
-    pendingCount-uploadedCount,
-    uploadedCount
-  );
 
 }
 
