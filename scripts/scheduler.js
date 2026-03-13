@@ -12,6 +12,7 @@ const PENDING_FOLDER_ID = process.env.PENDING_FOLDER_ID;
 const SCHEDULED_FOLDER_ID = process.env.SCHEDULED_FOLDER_ID;
 
 const MAX_UPLOADS_PER_RUN = 4;
+const MAX_UPLOADS_PER_DAY = 4;
 
 /*
 IST offset
@@ -39,7 +40,7 @@ const drive = google.drive({
 });
 
 /*
-Posting slots (IST)
+Posting slots IST
 */
 const SLOTS = [
   { h: 10, m: 0 },
@@ -49,7 +50,7 @@ const SLOTS = [
 ];
 
 /*
-Title hooks
+Titles
 */
 const TITLE_VARIATIONS = [
   "WATCH TILL THE END 🔥",
@@ -73,7 +74,85 @@ function rand(min,max){
 }
 
 /*
-Generate schedule slots correctly across days
+Get IST date string
+*/
+function getISTDate(){
+
+  const now = new Date();
+  const ist = new Date(now.getTime() + IST_OFFSET);
+
+  return ist.toISOString().split("T")[0];
+
+}
+
+/*
+Read daily upload tracker
+*/
+function getDailyUploads(){
+
+  const today = getISTDate();
+
+  if(!fs.existsSync("daily-limit.json")){
+
+    const data = {
+      date: today,
+      uploads: 0
+    };
+
+    fs.writeFileSync(
+      "daily-limit.json",
+      JSON.stringify(data,null,2)
+    );
+
+    return data;
+
+  }
+
+  const data = JSON.parse(
+    fs.readFileSync("daily-limit.json")
+  );
+
+  if(data.date !== today){
+
+    const reset = {
+      date: today,
+      uploads: 0
+    };
+
+    fs.writeFileSync(
+      "daily-limit.json",
+      JSON.stringify(reset,null,2)
+    );
+
+    return reset;
+
+  }
+
+  return data;
+
+}
+
+/*
+Update daily uploads
+*/
+function updateDailyUploads(count){
+
+  const today = getISTDate();
+
+  const data = {
+    date: today,
+    uploads: count
+  };
+
+  fs.writeFileSync(
+    "daily-limit.json",
+    JSON.stringify(data,null,2)
+  );
+
+}
+
+/*
+Generate schedule slots
 */
 function generateScheduleSlots(count){
 
@@ -88,16 +167,15 @@ function generateScheduleSlots(count){
 
     for(const s of SLOTS){
 
-      const baseIST = new Date(istNow);
+      const base = new Date(istNow);
 
-      baseIST.setDate(istNow.getDate() + dayOffset);
+      base.setDate(istNow.getDate() + dayOffset);
 
-      baseIST.setHours(s.h);
-      baseIST.setMinutes(s.m + rand(-12,12));
-      baseIST.setSeconds(rand(0,45));
-      baseIST.setMilliseconds(0);
+      base.setHours(s.h);
+      base.setMinutes(s.m + rand(-12,12));
+      base.setSeconds(rand(0,40));
 
-      const utc = new Date(baseIST.getTime() - IST_OFFSET);
+      const utc = new Date(base.getTime() - IST_OFFSET);
 
       slots.push(utc);
 
@@ -113,9 +191,6 @@ function generateScheduleSlots(count){
 
 }
 
-/*
-Generate title
-*/
 function generateTitle(){
 
   const hook = TITLE_VARIATIONS[rand(0,TITLE_VARIATIONS.length-1)];
@@ -238,6 +313,18 @@ async function run(){
 
   console.log("Checking pending videos...");
 
+  const daily = getDailyUploads();
+
+  if(daily.uploads >= MAX_UPLOADS_PER_DAY){
+
+    console.log("Daily upload limit reached.");
+
+    writeDashboardStatus(0,0);
+
+    return;
+
+  }
+
   const files = await getPendingVideos();
 
   const pendingCount = files.length;
@@ -249,7 +336,15 @@ async function run(){
 
   }
 
-  const batch = files.slice(0,MAX_UPLOADS_PER_RUN);
+  const remainingToday = MAX_UPLOADS_PER_DAY - daily.uploads;
+
+  const batchSize = Math.min(
+    MAX_UPLOADS_PER_RUN,
+    remainingToday,
+    files.length
+  );
+
+  const batch = files.slice(0,batchSize);
 
   const slots = generateScheduleSlots(batch.length);
 
@@ -275,6 +370,8 @@ async function run(){
     uploadedCount++;
 
   }
+
+  updateDailyUploads(daily.uploads + uploadedCount);
 
   writeDashboardStatus(
     pendingCount - uploadedCount,
