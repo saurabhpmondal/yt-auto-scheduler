@@ -11,6 +11,8 @@ const REFRESH_TOKEN = process.env.YOUTUBE_REFRESH_TOKEN;
 const PENDING_FOLDER_ID = process.env.PENDING_FOLDER_ID;
 const SCHEDULED_FOLDER_ID = process.env.SCHEDULED_FOLDER_ID;
 
+const MAX_UPLOADS_PER_RUN = 20;
+
 const oauth2Client = new google.auth.OAuth2(
   CLIENT_ID,
   CLIENT_SECRET,
@@ -38,29 +40,38 @@ const SLOTS = [
   { h: 20, m: 0 }
 ];
 
-function getNextSlot() {
+function generateScheduleSlots(count) {
 
-  const now = new Date();
+  const slots = [];
 
-  for (const slot of SLOTS) {
+  const start = new Date();
 
-    const d = new Date();
+  start.setDate(start.getDate() + 1);
+  start.setHours(10);
+  start.setMinutes(0);
+  start.setSeconds(0);
 
-    d.setHours(slot.h);
-    d.setMinutes(slot.m);
-    d.setSeconds(0);
+  let day = 0;
 
-    if (d > now) return d;
+  while (slots.length < count) {
+
+    for (const s of SLOTS) {
+
+      const d = new Date(start);
+
+      d.setDate(start.getDate() + day);
+      d.setHours(s.h);
+      d.setMinutes(s.m);
+
+      slots.push(new Date(d));
+
+      if (slots.length >= count) break;
+    }
+
+    day++;
   }
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  tomorrow.setHours(SLOTS[0].h);
-  tomorrow.setMinutes(SLOTS[0].m);
-  tomorrow.setSeconds(0);
-
-  return tomorrow;
+  return slots;
 }
 
 async function getPendingVideos() {
@@ -76,8 +87,9 @@ async function getPendingVideos() {
 
 async function downloadFile(fileId, name) {
 
-  const filePath = `/tmp/${name}`;
-  const dest = fs.createWriteStream(filePath);
+  const path = `/tmp/${name}`;
+
+  const dest = fs.createWriteStream(path);
 
   const res = await drive.files.get(
     { fileId, alt: "media" },
@@ -88,7 +100,7 @@ async function downloadFile(fileId, name) {
     res.data.pipe(dest).on("finish", resolve).on("error", reject);
   });
 
-  return filePath;
+  return path;
 }
 
 async function uploadToYoutube(filePath, title, publishTime) {
@@ -124,7 +136,7 @@ async function uploadToYoutube(filePath, title, publishTime) {
 async function moveFile(fileId) {
 
   await drive.files.update({
-    fileId: fileId,
+    fileId,
     addParents: SCHEDULED_FOLDER_ID,
     removeParents: PENDING_FOLDER_ID
   });
@@ -138,31 +150,43 @@ async function run() {
   const files = await getPendingVideos();
 
   if (!files.length) {
+
     console.log("No pending videos.");
+
     return;
   }
 
-  const video = files[0];
+  const batch = files.slice(0, MAX_UPLOADS_PER_RUN);
 
-  console.log("Processing:", video.name);
+  const slots = generateScheduleSlots(batch.length);
 
-  const filePath = await downloadFile(video.id, video.name);
+  console.log(`Scheduling ${batch.length} videos`);
 
-  const publishTime = getNextSlot();
+  for (let i = 0; i < batch.length; i++) {
 
-  console.log("Scheduling for:", publishTime);
+    const video = batch[i];
 
-  const videoId = await uploadToYoutube(
-    filePath,
-    video.name,
-    publishTime
-  );
+    const slot = slots[i];
 
-  console.log("Uploaded video:", videoId);
+    console.log("Processing:", video.name);
 
-  await moveFile(video.id);
+    const path = await downloadFile(video.id, video.name);
 
-  console.log("Moved file to SCHEDULED folder");
+    console.log("Scheduling for:", slot);
+
+    const id = await uploadToYoutube(
+      path,
+      video.name,
+      slot
+    );
+
+    console.log("Uploaded:", id);
+
+    await moveFile(video.id);
+
+    console.log("Moved to SCHEDULED");
+
+  }
 
 }
 
