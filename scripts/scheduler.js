@@ -14,7 +14,7 @@ const SCHEDULED_FOLDER_ID = process.env.SCHEDULED_FOLDER_ID;
 const MAX_UPLOADS_PER_RUN = 4;
 
 /*
-IST Offset
+IST offset
 */
 const IST_OFFSET = 5.5 * 60 * 60 * 1000;
 
@@ -38,6 +38,9 @@ const drive = google.drive({
   auth: oauth2Client
 });
 
+/*
+Posting slots (IST)
+*/
 const SLOTS = [
   { h: 10, m: 0 },
   { h: 16, m: 0 },
@@ -45,6 +48,9 @@ const SLOTS = [
   { h: 20, m: 0 }
 ];
 
+/*
+Title hooks
+*/
 const TITLE_VARIATIONS = [
   "WATCH TILL THE END 🔥",
   "THIS WAS INSANE 🤯",
@@ -57,9 +63,9 @@ const TITLE_VARIATIONS = [
 const GAMEPLAY_TITLES = [
   "Clash Royale Comeback",
   "Clash Royale Epic Gameplay",
-  "Clash Royale Final Tower Finish",
   "Clash Royale Clutch Moment",
-  "Clash Royale Pro Strategy"
+  "Clash Royale Pro Strategy",
+  "Clash Royale Final Tower Finish"
 ];
 
 function rand(min,max){
@@ -67,7 +73,7 @@ function rand(min,max){
 }
 
 /*
-Generate schedule times (IST + human randomness)
+Generate schedule slots correctly across days
 */
 function generateScheduleSlots(count){
 
@@ -76,29 +82,22 @@ function generateScheduleSlots(count){
   const now = new Date();
   const istNow = new Date(now.getTime() + IST_OFFSET);
 
-  const start = new Date(istNow);
-  start.setDate(start.getDate() + 1);
-  start.setHours(0);
-  start.setMinutes(0);
-  start.setSeconds(0);
-
-  let day = 0;
+  let dayOffset = 1;
 
   while(slots.length < count){
 
     for(const s of SLOTS){
 
-      const d = new Date(start);
+      const baseIST = new Date(istNow);
 
-      d.setDate(start.getDate() + day);
+      baseIST.setDate(istNow.getDate() + dayOffset);
 
-      const variation = rand(-12,12);
+      baseIST.setHours(s.h);
+      baseIST.setMinutes(s.m + rand(-12,12));
+      baseIST.setSeconds(rand(0,45));
+      baseIST.setMilliseconds(0);
 
-      d.setHours(s.h);
-      d.setMinutes(s.m + variation);
-      d.setSeconds(rand(0,40));
-
-      const utc = new Date(d.getTime() - IST_OFFSET);
+      const utc = new Date(baseIST.getTime() - IST_OFFSET);
 
       slots.push(utc);
 
@@ -106,7 +105,7 @@ function generateScheduleSlots(count){
 
     }
 
-    day++;
+    dayOffset++;
 
   }
 
@@ -114,6 +113,9 @@ function generateScheduleSlots(count){
 
 }
 
+/*
+Generate title
+*/
 function generateTitle(){
 
   const hook = TITLE_VARIATIONS[rand(0,TITLE_VARIATIONS.length-1)];
@@ -160,11 +162,9 @@ async function downloadFile(fileId,name){
   );
 
   await new Promise((resolve,reject)=>{
-
     res.data.pipe(dest)
       .on("finish",resolve)
       .on("error",reject);
-
   });
 
   return path;
@@ -186,12 +186,7 @@ async function uploadToYoutube(filePath,publishTime){
       snippet:{
         title:title,
         description:generateDescription(title),
-        tags:[
-          "shorts",
-          "clashroyale",
-          "gaming",
-          "mobilegaming"
-        ]
+        tags:["shorts","clashroyale","gaming","mobilegaming"]
       },
 
       status:{
@@ -221,17 +216,14 @@ async function moveFile(fileId){
 
 }
 
-/*
-Write dashboard status
-*/
 function writeDashboardStatus(pending,uploaded){
 
   const status = {
 
-    last_run: new Date().toISOString(),
-    pending_videos: pending,
-    uploaded_this_run: uploaded,
-    total_processed_this_run: uploaded
+    last_run:new Date().toISOString(),
+    pending_videos:pending,
+    uploaded_this_run:uploaded,
+    total_processed_this_run:uploaded
 
   };
 
@@ -252,10 +244,7 @@ async function run(){
 
   if(!files.length){
 
-    console.log("No pending videos.");
-
     writeDashboardStatus(0,0);
-
     return;
 
   }
@@ -263,8 +252,6 @@ async function run(){
   const batch = files.slice(0,MAX_UPLOADS_PER_RUN);
 
   const slots = generateScheduleSlots(batch.length);
-
-  console.log(`Scheduling ${batch.length} videos`);
 
   let uploadedCount = 0;
 
