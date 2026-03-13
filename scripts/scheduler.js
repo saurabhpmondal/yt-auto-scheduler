@@ -42,7 +42,7 @@ const drive = google.drive({
 });
 
 /*
-Posting slots (IST)
+Base posting slots (IST)
 */
 const SLOTS = [
   { h: 10, m: 0 },
@@ -52,28 +52,42 @@ const SLOTS = [
 ];
 
 /*
-Title variations for Shorts
+Hook titles
 */
 const TITLE_VARIATIONS = [
-  "Insane Clash Royale Finish",
-  "Epic Clash Royale Clutch",
-  "Crazy Clash Royale Comeback",
-  "Clash Royale Pro Gameplay",
-  "Unbelievable Clash Royale Moment",
-  "Clash Royale Insane Push",
-  "Clash Royale Final Seconds Win",
-  "Clash Royale Intense Battle",
-  "Pro Level Clash Royale Gameplay",
-  "Clash Royale Perfect Counter",
-  "Clash Royale Unexpected Victory",
-  "Clash Royale Ultimate Defense",
-  "Clash Royale Close Match",
-  "Clash Royale Epic Tower Finish",
-  "Clash Royale Last Second Clutch"
+  "WATCH TILL THE END 🔥",
+  "1 HP LEFT 😳",
+  "THIS WAS INSANE 🤯",
+  "NO WAY THIS WORKED",
+  "LAST SECOND CLUTCH",
+  "UNBELIEVABLE FINISH",
+  "PRO PLAYER MOVE",
+  "THIS DEFENSE SAVED THE GAME"
 ];
 
 /*
-Generate IST scheduling slots
+Gameplay titles
+*/
+const GAMEPLAY_TITLES = [
+  "Clash Royale Comeback",
+  "Clash Royale Epic Gameplay",
+  "Clash Royale Clutch Moment",
+  "Clash Royale Intense Battle",
+  "Clash Royale Final Tower Finish",
+  "Clash Royale Pro Strategy",
+  "Clash Royale Unexpected Win",
+  "Clash Royale Ultimate Defense"
+];
+
+/*
+Random helper
+*/
+function rand(min,max){
+  return Math.floor(Math.random()*(max-min+1))+min;
+}
+
+/*
+Generate random human-like schedule
 */
 function generateScheduleSlots(count){
 
@@ -99,9 +113,12 @@ function generateScheduleSlots(count){
       const d = new Date(start);
 
       d.setDate(start.getDate() + day);
+
+      const minuteVariation = rand(-12,12);
+
       d.setHours(s.h);
-      d.setMinutes(s.m);
-      d.setSeconds(0);
+      d.setMinutes(s.m + minuteVariation);
+      d.setSeconds(rand(0,40));
 
       const utcTime = new Date(d.getTime() - IST_OFFSET);
 
@@ -120,20 +137,19 @@ function generateScheduleSlots(count){
 }
 
 /*
-Random title generator
+Generate viral title
 */
 function generateTitle(){
 
-  const index = Math.floor(Math.random() * TITLE_VARIATIONS.length);
+  const hook = TITLE_VARIATIONS[rand(0,TITLE_VARIATIONS.length-1)];
+  const gameplay = GAMEPLAY_TITLES[rand(0,GAMEPLAY_TITLES.length-1)];
 
-  const base = TITLE_VARIATIONS[index];
-
-  return `${base} 🔥 #shorts #clashroyale`;
+  return `${hook} ${gameplay} #shorts`;
 
 }
 
 /*
-Description generator
+Description
 */
 function generateDescription(title){
 
@@ -196,7 +212,7 @@ async function downloadFile(fileId,name){
 }
 
 /*
-Upload video to YouTube
+Upload video
 */
 async function uploadToYoutube(filePath,publishTime){
 
@@ -240,7 +256,7 @@ async function uploadToYoutube(filePath,publishTime){
 }
 
 /*
-Move video after scheduling
+Move file to scheduled folder
 */
 async function moveFile(fileId){
 
@@ -279,7 +295,6 @@ async function run(){
   for(let i=0;i<batch.length;i++){
 
     const video = batch[i];
-
     const slot = slots[i];
 
     console.log("Processing:",video.name);
